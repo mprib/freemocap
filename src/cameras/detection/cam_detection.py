@@ -1,5 +1,6 @@
 import logging
 import platform
+import numpy as np
 
 import cv2
 
@@ -19,14 +20,27 @@ class DetectPossibleCameras:
             cap = cv2.VideoCapture(cam_id, cv2_backend)
             success, image = cap.read()
 
-            if success:
-                if image is not None:
+            # # is_all_zeroes = np.all(image == 0)
+            # try:
+            #     mean_image_pixel = np.average(image)
+            #     print(f"Mean image pixel intensity is: {mean_image_pixel}")
+            # except TypeError:
+            #     success = False
+
+            
+            if success and image is not None:
+                # virtual cameras may pollute the possible devices
+                # check that video input is not entirely blank
+                if image.mean() != 0:
+                    print(cam_id, "Average Pixel Intensity", image.mean(axis=0).mean(axis=0))
+            
                     try:
                         logger.debug(f"Camera found at port number {cam_id}")
                         cams_to_use_list.append(str(cam_id))
+                        cv2.imwrite(str(cam_id) + ".png", image)
                     finally:
                         cap.release()
-
+        
         return FoundCamerasResponse(
             number_of_cameras_found=len(cams_to_use_list),
             cameras_found_list=cams_to_use_list,
