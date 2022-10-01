@@ -24,6 +24,7 @@ from src.core_processes.capture_volume_calibration.charuco_board_detection.datac
 from src.core_processes.capture_volume_calibration.get_anipose_calibration_object import (
     load_most_recent_anipose_calibration_toml,
     load_calibration_from_session_id,
+    load_anipose_calibration_toml_from_user_selection,
 )
 from src.core_processes.mediapipe_stuff.load_mediapipe2d_data import (
     load_mediapipe2d_data,
@@ -56,7 +57,6 @@ from src.sending_anonymous_user_info_to_places.send_pipedream_ping import (
 # reboot GUI method based on this - https://stackoverflow.com/a/56563926/14662833
 EXIT_CODE_REBOOT = -123456789
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -69,18 +69,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("freemocap \U0001F480 \U00002728")
         # self._set_icon()
 
-
-
-
         self._main_window_width = int(1920 * 0.9)
         self._main_window_height = int(1080 * 0.8)
         APP_STATE.main_window_height = self._main_window_height
         APP_STATE.main_window_width = self._main_window_width
 
         self.setGeometry(0, 0, self._main_window_width, self._main_window_height)
-        self.setMaximumHeight(1000)
         self._main_layout = self._create_main_layout()
-
+        self._main_layout.setMaximumHeight(self._main_window_height)
         # left side (control) panel
         self._control_panel = self._create_control_panel()
         self._main_layout.addWidget(self._control_panel.frame)
@@ -123,7 +119,7 @@ class MainWindow(QMainWindow):
 
         width = self._main_window_width * 0.2
         height = self._main_window_height
-        panel.frame.setMinimumHeight(height)
+        panel.frame.setMinimumHeight(height / 2)
         panel.frame.setMinimumWidth(int(width/ 2))
         size_hint = panel.frame.sizeHint()
         size_hint.setWidth(int(width))
@@ -135,8 +131,8 @@ class MainWindow(QMainWindow):
         panel = MiddleViewingPanel()
         width = self._main_window_width * 0.7
         height = self._main_window_height
-        panel.frame.setMinimumHeight(height)
-        panel.frame.setMinimumWidth(int(width / 2))
+        panel.frame.setMinimumHeight(height / 2)
+        panel.frame.setMinimumWidth(width / 2)
         size_hint = panel.frame.sizeHint()
         size_hint.setWidth(int(width))
         size_hint.setHeight(height)
@@ -150,8 +146,8 @@ class MainWindow(QMainWindow):
 
         width = self._main_window_width * 0.1
         height = self._main_window_height
-        panel.frame.setMinimumHeight(height)
-        panel.frame.setMinimumWidth(int(width / 2))
+        # panel.frame.setMinimumHeight(height)
+        panel.frame.setMinimumWidth(width / 2)
         size_hint = panel.frame.sizeHint()
         size_hint.setWidth(int(width))
         size_hint.setHeight(height)
@@ -171,10 +167,10 @@ class MainWindow(QMainWindow):
         self._load_session_action = QAction("&Load Session...", parent=self)
         self._load_session_action.setShortcut("Ctrl+O")
 
-        self._import_external_videos_action = QAction(
-            "&Import External Videos...", parent=self
+        self._import_videos_action = QAction(
+            "Import Synchronized &Videos...", parent=self
         )
-        self._import_external_videos_action.setShortcut("Ctrl+I")
+        self._import_videos_action.setShortcut("Ctrl+I")
 
         self._reboot_gui_action = QAction("&Reboot GUI", parent=self)
         self._reboot_gui_action.setShortcut("Ctrl+R")
@@ -228,6 +224,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._new_session_action)
         file_menu.addAction(self._load_most_recent_session_action)
         file_menu.addAction(self._load_session_action)
+        file_menu.addAction(self._import_videos_action)
         file_menu.addAction(self._reboot_gui_action)
         file_menu.addAction(self._exit_action)
 
@@ -263,10 +260,7 @@ class MainWindow(QMainWindow):
     def _connect_actions_to_slots(self):
 
         self._new_session_action.triggered.connect(
-            lambda: self._start_session(
-                session_id=self._middle_viewing_panel.welcome_create_or_load_session_panel.session_id_input_string,
-                new_session=True,
-            )
+            self._middle_viewing_panel.welcome_create_or_load_session_panel.show_new_session_setup_view
         )
 
         self._load_most_recent_session_action.triggered.connect(
@@ -275,11 +269,8 @@ class MainWindow(QMainWindow):
 
         self._load_session_action.triggered.connect(self._load_session_dialog)
 
-        self._todo_import_videos_pop_up = QLabel(
-            "\nTODO - pop up 'session id' panel, then a 'select video folder' dialog and copy those videos into the session folder\n"
-        )
-        self._import_external_videos_action.triggered.connect(
-            self._todo_import_videos_pop_up.show
+        self._import_videos_action.triggered.connect(
+            self._middle_viewing_panel.welcome_create_or_load_session_panel.show_import_videos_view
         )
 
         self._reboot_gui_action.triggered.connect(self._reboot_gui)
@@ -319,8 +310,11 @@ class MainWindow(QMainWindow):
         logger.info("Connecting buttons to stuff")
 
         # Welcome Panel
-        self._middle_viewing_panel.welcome_create_or_load_session_panel.start_new_session_button.clicked.connect(
-            self._new_session_action.trigger
+        self._middle_viewing_panel.welcome_create_or_load_session_panel.start_session_button.clicked.connect(
+            lambda: self._start_session(
+                session_id=self._middle_viewing_panel.welcome_create_or_load_session_panel.session_id_input_string,
+                new_session=True,
+            )
         )
 
         self._middle_viewing_panel.welcome_create_or_load_session_panel.load_most_recent_session_button.clicked.connect(
@@ -331,8 +325,8 @@ class MainWindow(QMainWindow):
             self._load_session_action.trigger
         )
 
-        self._middle_viewing_panel.welcome_create_or_load_session_panel.import_external_videos_button.clicked.connect(
-            self._import_external_videos_action.trigger
+        self._middle_viewing_panel.welcome_create_or_load_session_panel.synchronized_videos_selection_dialog_button.clicked.connect(
+            self._import_videos
         )
 
         # Camera Control Panel
@@ -469,6 +463,30 @@ class MainWindow(QMainWindow):
 
         self._start_session(self._session_id)
 
+    def _import_videos(self):
+        # from this tutorial - https://www.youtube.com/watch?v=gg5TepTc2Jg&t=649s
+        external_videos_path = QFileDialog.getExistingDirectory(
+            self,
+            "Select a folder containig synchronized videos (each video must have *exactly* the same number of frames)",
+            str(Path.home()),
+        )
+        self._session_id = (
+            self._middle_viewing_panel.welcome_create_or_load_session_panel.session_id_input_string
+        )
+
+        synchronized_videos_folder_path = get_synchronized_videos_folder_path(
+            self._session_id, create_folder=True
+        )
+
+        logger.info(
+            f"Copying videos from {external_videos_path} to {synchronized_videos_folder_path}"
+        )
+
+        for video_path in Path(external_videos_path).glob("*.mp4"):
+            shutil.copy(video_path, synchronized_videos_folder_path)
+
+        self._start_session(self._session_id)
+
     def _start_session(self, session_id: str, new_session: bool = False):
 
         if (
@@ -490,18 +508,20 @@ class MainWindow(QMainWindow):
             text + ", session_id: " + self._session_id
         )
 
-        self._thread_worker_manager.launch_detect_cameras_worker()
+        if (
+            new_session
+            and self._middle_viewing_panel.welcome_create_or_load_session_panel.auto_detect_cameras_checkbox.isChecked()
+        ):
+            self._thread_worker_manager.launch_detect_cameras_worker()
 
         self._show_camera_control_panel_action.trigger()
 
         self._middle_viewing_panel.show_camera_streams()
 
-        if new_session:
-            self._auto_launch_camera_streams = True
-
-        self._middle_viewing_panel.show_camera_streams()
-
-        if new_session:
+        if (
+            new_session
+            and self._middle_viewing_panel.welcome_create_or_load_session_panel.auto_connect_to_cameras_checkbox.isChecked()
+        ):
             self._auto_launch_camera_streams = True
 
     def _handle_found_cameras_response(
@@ -608,7 +628,9 @@ class MainWindow(QMainWindow):
             self._session_id
         )
         charuco_board_definition = self._get_user_specified_charuco_definition()
-        logger.info(f"Launching Anipose calibration thread worker with the following parameters: {charuco_board_definition.__dict__}")
+        logger.info(
+            f"Launching Anipose calibration thread worker with the following parameters: {charuco_board_definition.__dict__}"
+        )
         self._thread_worker_manager.launch_anipose_calibration_thread_worker(
             charuco_board_definition=charuco_board_definition,
             calibration_videos_folder_path=calibration_videos_folder_path,
@@ -660,6 +682,19 @@ class MainWindow(QMainWindow):
             anipose_calibration_object = load_most_recent_anipose_calibration_toml(
                 get_session_folder_path(self._session_id)
             )
+        elif (
+            self._control_panel.calibrate_capture_volume_panel.load_camera_calibration_checkbox_is_checked
+        ):
+            anipose_calibration_object = load_anipose_calibration_toml_from_user_selection(
+                self._control_panel.calibrate_capture_volume_panel.user_selected_calibration_toml_path,
+                get_session_folder_path(self._session_id),
+            )
+            if anipose_calibration_object is None:
+                logger.error(
+                    "Could not load user selected calibration file! Aborting '_setup_and_launch_triangulate_3d_thread_worker'..."
+                )
+                return
+
         else:
             anipose_calibration_object = load_calibration_from_session_id(
                 get_session_calibration_toml_file_path(self._session_id)
